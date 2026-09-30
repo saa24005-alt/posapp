@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>クラウドレジアプリ</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .hidden { display: none !important; }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Navbar -->
+    <nav class="bg-blue-600 text-white shadow-md p-4 flex justify-between items-center">
+        <h1 class="text-xl font-bold">🛒 クラウドレジ</h1>
+        <div id="auth-section">
+            <button id="login-btn" class="bg-white text-blue-600 px-4 py-2 rounded shadow hover:bg-blue-50 transition">Googleでログイン</button>
+            <div id="user-info" class="hidden flex items-center gap-4">
+                <span id="user-name" class="text-sm font-medium"></span>
+                <button id="logout-btn" class="bg-blue-800 hover:bg-blue-700 px-3 py-1 rounded text-sm transition">ログアウト</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="container mx-auto p-4 max-w-4xl mt-4">
+        
+        <!-- Login Prompt -->
+        <div id="login-prompt" class="bg-white p-8 rounded-lg shadow-md text-center mt-10">
+            <h2 class="text-2xl font-semibold mb-4">レジアプリへようこそ</h2>
+            <p class="text-gray-600 mb-6">機能を利用するにはGoogleアカウントでログインしてください。</p>
+        </div>
+
+        <!-- App Content (Hidden until logged in) -->
+        <div id="app-content" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Input Form -->
+            <div class="md:col-span-1 bg-white p-6 rounded-lg shadow-md h-fit">
+                <h2 class="text-lg font-bold mb-4 border-b pb-2" id="form-title">新規登録</h2>
+                
+                <form id="pos-form" class="space-y-4">
+                    <input type="hidden" id="edit-id" value="">
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">日付 <span class="text-red-500">*</span></label>
+                        <input type="date" id="date" required class="w-full border rounded p-2 focus:ring focus:ring-blue-200 focus:outline-none">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">商品名 <span class="text-red-500">*</span></label>
+                        <input type="text" id="product-name" required class="w-full border rounded p-2 focus:ring focus:ring-blue-200 focus:outline-none" placeholder="例: コーヒー">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">単価(円) <span class="text-red-500">*</span></label>
+                            <input type="number" id="price" min="0" required class="w-full border rounded p-2 focus:ring focus:ring-blue-200 focus:outline-none" placeholder="0">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">個数 <span class="text-red-500">*</span></label>
+                            <input type="number" id="quantity" min="1" required class="w-full border rounded p-2 focus:ring focus:ring-blue-200 focus:outline-none" placeholder="1">
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-3 rounded text-right">
+                        <span class="text-sm text-gray-500">合計金額:</span>
+                        <span id="display-total" class="text-xl font-bold text-blue-600 ml-2">¥0</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1">メモ</label>
+                        <textarea id="memo" rows="2" class="w-full border rounded p-2 focus:ring focus:ring-blue-200 focus:outline-none" placeholder="備考など"></textarea>
+                    </div>
+                    
+                    <div id="error-msg" class="text-red-500 text-sm hidden bg-red-50 p-2 rounded"></div>
+
+                    <div class="flex gap-2">
+                        <button type="submit" id="submit-btn" class="flex-1 bg-green-500 text-white py-2 rounded font-medium hover:bg-green-600 transition">登録する</button>
+                        <button type="button" id="cancel-edit-btn" class="hidden bg-gray-400 text-white px-4 rounded hover:bg-gray-500 transition">キャンセル</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Data List & Dashboard -->
+            <div class="md:col-span-2 space-y-6">
+                
+                <!-- Dashboard Summary -->
+                <div class="bg-white p-4 rounded-lg shadow-md flex justify-between items-center">
+                    <div>
+                        <h3 class="text-sm text-gray-500 font-medium">表示中の売上合計</h3>
+                        <p id="total-sales" class="text-2xl font-bold text-gray-800">¥0</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm font-medium">表示切替:</label>
+                        <select id="data-filter" class="border rounded p-1 text-sm focus:outline-none focus:ring focus:ring-blue-200">
+                            <option value="all">すべての記録</option>
+                            <option value="mine">自分の記録のみ</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Data Table -->
+                <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                    <div class="p-4 bg-gray-50 border-b flex justify-between items-center">
+                        <h2 class="text-lg font-bold">販売履歴</h2>
+                        <div class="relative">
+                            <input type="text" id="search-input" placeholder="商品名で検索..." class="border rounded-full pl-8 pr-4 py-1 text-sm focus:outline-none focus:ring focus:ring-blue-200">
+                            <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="bg-gray-100 text-gray-600">
+                                <tr>
+                                    <th class="p-3">日付</th>
+                                    <th class="p-3">商品名</th>
+                                    <th class="p-3 text-right">単価</th>
+                                    <th class="p-3 text-center">個数</th>
+                                    <th class="p-3 text-right">合計</th>
+                                    <th class="p-3">登録者</th>
+                                    <th class="p-3 text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="data-table-body" class="divide-y">
+                                <!-- Data rows will be injected here -->
+                                <tr><td colspan="7" class="p-8 text-center text-gray-400">読み込み中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom Modal for Delete Confirmation -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+            <h3 class="text-lg font-bold mb-2">確認</h3>
+            <p class="text-gray-600 mb-6">このデータを削除してもよろしいですか？</p>
+            <div class="flex justify-end gap-3">
+                <button id="modal-cancel" class="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100">キャンセル</button>
+                <button id="modal-confirm" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">削除する</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Setup -->
+    <script type="module">
+        // Import Firebase V9 functions
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // ==========================================
+        // ⚠️ REPLACE THIS CONFIG WITH YOUR OWN FIREBASE CONFIG
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyYOUR_API_KEY_HERE",
+            authDomain: "your-project-id.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project-id.appspot.com",
+            messagingSenderId: "1234567890",
+            appId: "1:1234567890:web:abcdef123456"
+        };
+        // ==========================================
+
+        // Initialize Firebase
+        let app;
+        try {
+             // Handle collaborative environment overrides if present
+            const configToUse = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
+            app = initializeApp(configToUse);
+        } catch(e) {
+            console.error("Firebase init error (usually means default config is invalid)", e);
+            document.getElementById('login-prompt').innerHTML = `
+                <div class="text-red-500 font-bold mb-2">設定エラー</div>
+                <p>Firebaseの設定が完了していません。コード内の <code>firebaseConfig</code> をご自身のプロジェクトのものに書き換えてください。</p>
+            `;
+            throw e;
+        }
+
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // Use environment App ID if available, otherwise default
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-pos-app';
+        
+        // Define collection path based on rules. We use public data so everyone can see the main register
+        // But we add authorId to filter "My Data"
+        const POS_COLLECTION_PATH = `artifacts/${appId}/public/data/sales`;
+        const salesCollectionRef = collection(db, POS_COLLECTION_PATH);
+
+        // State variables
+        let currentUser = null;
+        let salesData = [];
+        let itemToDelete = null;
+
+        // DOM Elements
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userInfo = document.getElementById('user-info');
+        const userNameDisplay = document.getElementById('user-name');
+        const loginPrompt = document.getElementById('login-prompt');
+        const appContent = document.getElementById('app-content');
+        
+        const posForm = document.getElementById('pos-form');
+        const inputDate = document.getElementById('date');
+        const inputName = document.getElementById('product-name');
+        const inputPrice = document.getElementById('price');
+        const inputQuantity = document.getElementById('quantity');
+        const inputMemo = document.getElementById('memo');
+        const displayTotal = document.getElementById('display-total');
+        const errorMsg = document.getElementById('error-msg');
+        
+        const dataTableBody = document.getElementById('data-table-body');
+        const totalSalesDisplay = document.getElementById('total-sales');
+        const dataFilter = document.getElementById('data-filter');
+        const searchInput = document.getElementById('search-input');
+        
+        const editIdInput = document.getElementById('edit-id');
+        const formTitle = document.getElementById('form-title');
+        const submitBtn = document.getElementById('submit-btn');
+        const cancelEditBtn = document.getElementById('cancel-edit-btn');
+
+        const confirmModal = document.getElementById('confirm-modal');
+        const modalConfirm = document.getElementById('modal-confirm');
+        const modalCancel = document.getElementById('modal-cancel');
+
+        // Set default date to today
+        const today = new Date().toISOString().split('T')[0];
+        inputDate.value = today;
+
+        // --- Authentication Logic ---
+        
+        // Handle environment auth if injected
+        if (typeof __initial_auth_token !== 'undefined') {
+            import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js").then(module => {
+                module.signInWithCustomToken(auth, __initial_auth_token).catch(e => console.error(e));
+            });
+        }
+
+        const provider = new GoogleAuthProvider();
+
+        loginBtn.addEventListener('click', async () => {
+            try {
+                loginBtn.innerHTML = '<div class="spinner inline-block mr-2"></div> ログイン中...';
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Login failed:", error);
+                alert("ログインに失敗しました。");
+                loginBtn.innerHTML = 'Googleでログイン';
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            signOut(auth);
+        });
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                // Logged in
+                loginBtn.classList.add('hidden');
+                userInfo.classList.remove('hidden');
+                userNameDisplay.textContent = user.displayName || user.email;
+                
+                loginPrompt.classList.add('hidden');
+                appContent.classList.remove('hidden');
+                
+                fetchData(); // Load data when logged in
+            } else {
+                // Logged out
+                loginBtn.classList.remove('hidden');
+                loginBtn.innerHTML = 'Googleでログイン';
+                userInfo.classList.add('hidden');
+                
+                loginPrompt.classList.remove('hidden');
+                appContent.classList.add('hidden');
+            }
+        });
+
+        // --- Form Logic & Validation ---
+        
+        // Auto calculate total
+        function calculateTotal() {
+            const price = parseInt(inputPrice.value) || 0;
+            const quantity = parseInt(inputQuantity.value) || 0;
+            const total = price * quantity;
+            displayTotal.textContent = `¥${total.toLocaleString()}`;
+            return total;
+        }
+
+        inputPrice.addEventListener('input', calculateTotal);
+        inputQuantity.addEventListener('input', calculateTotal);
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.classList.remove('hidden');
+        }
+        function hideError() {
+            errorMsg.classList.add('hidden');
+        }
+
+        function resetForm() {
+            posForm.reset();
+            inputDate.value = today;
+            editIdInput.value = '';
+            formTitle.textContent = '新規登録';
+            submitBtn.textContent = '登録する';
+            submitBtn.classList.replace('bg-yellow-500', 'bg-green-500');
+            submitBtn.classList.replace('hover:bg-yellow-600', 'hover:bg-green-600');
+            cancelEditBtn.classList.add('hidden');
+            calculateTotal();
+            hideError();
+        }
+
+        cancelEditBtn.addEventListener('click', resetForm);
+
+        // --- Database CRUD Operations ---
+
+        posForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentUser) return;
+            hideError();
+
+            const date = inputDate.value;
+            const name = inputName.value.trim();
+            const price = parseInt(inputPrice.value);
+            const quantity = parseInt(inputQuantity.value);
+            const memo = inputMemo.value.trim();
+
+            // Validation
+            if (!date || !name) {
+                showError("必須項目を入力してください。");
+                return;
+            }
+            if (isNaN(price) || price < 0 || isNaN(quantity) || quantity < 1) {
+                showError("単価と個数には正しい数値を入力してください。");
+                return;
+            }
+
+            const total = price * quantity;
+            const editId = editIdInput.value;
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<div class="spinner inline-block"></div>';
+
+            try {
+                const dataObj = {
+                    date: date,
+                    productName: name,
+                    price: price,
+                    quantity: quantity,
+                    total: total,
+                    memo: memo,
+                    authorId: currentUser.uid,
+                    authorName: currentUser.displayName || currentUser.email.split('@')[0],
+                    updatedAt: serverTimestamp()
+                };
+
+                if (editId) {
+                    // Update existing
+                    const docRef = doc(db, POS_COLLECTION_PATH, editId);
+                    await updateDoc(docRef, dataObj);
+                } else {
+                    // Create new
+                    dataObj.createdAt = serverTimestamp();
+                    await addDoc(salesCollectionRef, dataObj);
+                }
+                
+                resetForm();
+            } catch (error) {
+                console.error("Error saving document: ", error);
+                showError("保存中にエラーが発生しました。権限を確認してください。");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = editId ? '更新する' : '登録する';
+            }
+        });
+
+        // --- Read & Render Data ---
+
+        let unsubscribe = null;
+
+        function fetchData() {
+            if (!currentUser) return;
+            if (unsubscribe) unsubscribe();
+
+            // Query: order by date descending
+            const q = query(salesCollectionRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
+
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                salesData = [];
+                snapshot.forEach((doc) => {
+                    salesData.push({ id: doc.id, ...doc.data() });
+                });
+                renderTable();
+            }, (error) => {
+                console.error("Error fetching data:", error);
+                dataTableBody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-500">データの読み込みに失敗しました。</td></tr>`;
+            });
+        }
+
+        function renderTable() {
+            const filterValue = dataFilter.value;
+            const searchQuery = searchInput.value.toLowerCase();
+            let displayData = salesData;
+
+            // Apply Filters
+            if (filterValue === 'mine') {
+                displayData = displayData.filter(item => item.authorId === currentUser.uid);
+            }
+            if (searchQuery) {
+                displayData = displayData.filter(item => item.productName.toLowerCase().includes(searchQuery));
+            }
+
+            // Calculate Total
+            const totalSum = displayData.reduce((sum, item) => sum + (item.total || 0), 0);
+            totalSalesDisplay.textContent = `¥${totalSum.toLocaleString()}`;
+
+            dataTableBody.innerHTML = '';
+
+            if (displayData.length === 0) {
+                dataTableBody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-500">データがありません</td></tr>`;
+                return;
+            }
+
+            displayData.forEach(item => {
+                const tr = document.createElement('tr');
+                const isMine = item.authorId === currentUser.uid;
+                
+                tr.innerHTML = `
+                    <td class="p-3">${item.date}</td>
+                    <td class="p-3 font-medium">
+                        ${item.productName}
+                        ${item.memo ? `<br><span class="text-xs text-gray-400 font-normal truncate block max-w-[150px]" title="${item.memo}">${item.memo}</span>` : ''}
+                    </td>
+                    <td class="p-3 text-right">¥${(item.price || 0).toLocaleString()}</td>
+                    <td class="p-3 text-center">${item.quantity}</td>
+                    <td class="p-3 text-right font-bold text-blue-600">¥${(item.total || 0).toLocaleString()}</td>
+                    <td class="p-3">
+                        <span class="px-2 py-1 bg-gray-100 rounded text-xs truncate max-w-[100px] inline-block" title="${item.authorName}">
+                            ${item.authorName}
+                        </span>
+                    </td>
+                    <td class="p-3 text-center">
+                        ${isMine ? `
+                            <button class="text-blue-500 hover:text-blue-700 mr-2 edit-btn" data-id="${item.id}">編集</button>
+                            <button class="text-red-500 hover:text-red-700 delete-btn" data-id="${item.id}">削除</button>
+                        ` : '<span class="text-xs text-gray-400">権限なし</span>'}
+                    </td>
+                `;
+                dataTableBody.appendChild(tr);
+            });
+
+            // Attach event listeners for dynamically created buttons
+            document.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', handleEditClick);
+            });
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', handleDeleteClick);
+            });
+        }
+
+        dataFilter.addEventListener('change', renderTable);
+        searchInput.addEventListener('input', renderTable);
+
+        // --- Update (Edit) Flow ---
+        function handleEditClick(e) {
+            const id = e.target.getAttribute('data-id');
+            const item = salesData.find(d => d.id === id);
+            if (!item) return;
+
+            inputDate.value = item.date;
+            inputName.value = item.productName;
+            inputPrice.value = item.price;
+            inputQuantity.value = item.quantity;
+            inputMemo.value = item.memo || '';
+            editIdInput.value = item.id;
+
+            calculateTotal();
+            hideError();
+
+            formTitle.textContent = 'データ編集';
+            submitBtn.textContent = '更新する';
+            submitBtn.classList.replace('bg-green-500', 'bg-yellow-500');
+            submitBtn.classList.replace('hover:bg-green-600', 'hover:bg-yellow-600');
+            cancelEditBtn.classList.remove('hidden');
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // --- Delete Flow (Modal) ---
+        function handleDeleteClick(e) {
+            itemToDelete = e.target.getAttribute('data-id');
+            confirmModal.classList.remove('hidden');
+        }
+
+        modalCancel.addEventListener('click', () => {
+            itemToDelete = null;
+            confirmModal.classList.add('hidden');
+        });
+
+        modalConfirm.addEventListener('click', async () => {
+            if (!itemToDelete || !currentUser) return;
+            
+            modalConfirm.disabled = true;
+            modalConfirm.innerHTML = '<div class="spinner inline-block w-4 h-4 border-2"></div>';
+
+            try {
+                const docRef = doc(db, POS_COLLECTION_PATH, itemToDelete);
+                await deleteDoc(docRef);
+                
+                // If the deleted item was currently being edited, reset form
+                if (editIdInput.value === itemToDelete) {
+                    resetForm();
+                }
+            } catch (error) {
+                console.error("Error deleting document:", error);
+                alert("削除に失敗しました。");
+            } finally {
+                modalConfirm.disabled = false;
+                modalConfirm.textContent = '削除する';
+                confirmModal.classList.add('hidden');
+                itemToDelete = null;
+            }
+        });
+
+    </script>
+</body>
+</html>
