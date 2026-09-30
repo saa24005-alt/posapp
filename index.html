@@ -167,14 +167,15 @@
         // ==========================================
         // ⚠️ REPLACE THIS CONFIG WITH YOUR OWN FIREBASE CONFIG
         // ==========================================
-       const firebaseConfig = {
-       apiKey: "AIzaSyAn409561wyqOnG6U_409SRWGVMrhryiG0",
-       authDomain: "sainou2.firebaseapp.com",
-       projectId: "sainou2",
-       storageBucket: "sainou2.firebasestorage.app",
-       messagingSenderId: "279015100306",
-       appId: "1:279015100306:web:865f27fd730cbb825abb4b"
-       };
+        const firebaseConfig = {
+  apiKey: "AIzaSyAn409561wyqOnG6U_409SRWGVMrhryiG0",
+  authDomain: "sainou2.firebaseapp.com",
+  projectId: "sainou2",
+  storageBucket: "sainou2.firebasestorage.app",
+  messagingSenderId: "279015100306",
+  appId: "1:279015100306:web:865f27fd730cbb825abb4b"
+};
+
         // ==========================================
 
         // Initialize Firebase
@@ -399,18 +400,29 @@
             if (!currentUser) return;
             if (unsubscribe) unsubscribe();
 
-            // Query: order by date descending
-            const q = query(salesCollectionRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
+            // Query: Firebaseのインデックスエラーを避けるため、条件なしで全件取得する
+            const q = query(salesCollectionRef);
 
             unsubscribe = onSnapshot(q, (snapshot) => {
                 salesData = [];
                 snapshot.forEach((doc) => {
                     salesData.push({ id: doc.id, ...doc.data() });
                 });
+                
+                // JS側（メモリ上）で日付(降順) -> 作成日時(降順)の順に並び替える
+                salesData.sort((a, b) => {
+                    if (a.date > b.date) return -1;
+                    if (a.date < b.date) return 1;
+                    // 日付が同じ場合は、作成日時で比較
+                    const timeA = a.createdAt ? (typeof a.createdAt.toMillis === 'function' ? a.createdAt.toMillis() : 0) : 0;
+                    const timeB = b.createdAt ? (typeof b.createdAt.toMillis === 'function' ? b.createdAt.toMillis() : 0) : 0;
+                    return timeB - timeA;
+                });
+
                 renderTable();
             }, (error) => {
                 console.error("Error fetching data:", error);
-                dataTableBody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-500">データの読み込みに失敗しました。</td></tr>`;
+                dataTableBody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-500">データの読み込みに失敗しました。詳細: ${error.message}</td></tr>`;
             });
         }
 
